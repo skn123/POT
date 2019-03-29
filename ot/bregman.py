@@ -120,7 +120,8 @@ def sinkhorn(a, b, M, reg, method='sinkhorn', numItermax=1000,
         print('Warning : unknown method using classic Sinkhorn Knopp')
 
         def sink():
-            return sinkhorn_knopp(a, b, M, reg, **kwargs)
+            return sinkhorn_knopp(a, b, M, reg, numItermax=numItermax,
+                                  stopThr=stopThr, verbose=verbose, log=log, **kwargs)
 
     return sink()
 
@@ -370,9 +371,9 @@ def sinkhorn_knopp(a, b, M, reg, numItermax=1000,
         v = np.divide(b, KtransposeU)
         u = 1. / np.dot(Kp, v)
 
-        if (np.any(KtransposeU == 0) or
-                np.any(np.isnan(u)) or np.any(np.isnan(v)) or
-                np.any(np.isinf(u)) or np.any(np.isinf(v))):
+        if (np.any(KtransposeU == 0)
+                or np.any(np.isnan(u)) or np.any(np.isnan(v))
+                or np.any(np.isinf(u)) or np.any(np.isinf(v))):
             # we have reached the machine precision
             # come back to previous solution and quit loop
             print('Warning: numerical errors at iteration', cpt)
@@ -499,6 +500,15 @@ def greenkhorn(a, b, M, reg, numItermax=10000, stopThr=1e-9, verbose=False, log=
 
     """
 
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    M = np.asarray(M, dtype=np.float64)
+
+    if len(a) == 0:
+        a = np.ones((M.shape[0],), dtype=np.float64) / M.shape[0]
+    if len(b) == 0:
+        b = np.ones((M.shape[1],), dtype=np.float64) / M.shape[1]
+
     n = a.shape[0]
     m = b.shape[0]
 
@@ -514,7 +524,9 @@ def greenkhorn(a, b, M, reg, numItermax=10000, stopThr=1e-9, verbose=False, log=
     viol = G.sum(1) - a
     viol_2 = G.sum(0) - b
     stopThr_val = 1
+
     if log:
+        log = dict()
         log['u'] = u
         log['v'] = v
 
@@ -683,13 +695,13 @@ def sinkhorn_stabilized(a, b, M, reg, numItermax=1000, tau=1e3, stopThr=1e-9,
 
     def get_K(alpha, beta):
         """log space computation"""
-        return np.exp(-(M - alpha.reshape((na, 1)) -
-                        beta.reshape((1, nb))) / reg)
+        return np.exp(-(M - alpha.reshape((na, 1))
+                        - beta.reshape((1, nb))) / reg)
 
     def get_Gamma(alpha, beta, u, v):
         """log space gamma computation"""
-        return np.exp(-(M - alpha.reshape((na, 1)) - beta.reshape((1, nb))) /
-                      reg + np.log(u.reshape((na, 1))) + np.log(v.reshape((1, nb))))
+        return np.exp(-(M - alpha.reshape((na, 1)) - beta.reshape((1, nb)))
+                      / reg + np.log(u.reshape((na, 1))) + np.log(v.reshape((1, nb))))
 
     # print(np.min(K))
 
@@ -899,8 +911,8 @@ def sinkhorn_epsilon_scaling(a, b, M, reg, numItermax=100, epsilon0=1e4, numInne
 
     def get_K(alpha, beta):
         """log space computation"""
-        return np.exp(-(M - alpha.reshape((na, 1)) -
-                        beta.reshape((1, nb))) / reg)
+        return np.exp(-(M - alpha.reshape((na, 1))
+                        - beta.reshape((1, nb))) / reg)
 
     # print(np.min(K))
     def get_reg(n):  # exponential decreasing
