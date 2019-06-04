@@ -55,6 +55,7 @@ setup(name='POT',
       data_files=[],
       requires=["numpy","scipy","cython","matplotlib"],
       install_requires=["numpy","scipy","cython","matplotlib"],
+      setup_requires=["numpy","cython"],
       classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
