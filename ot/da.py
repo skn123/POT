@@ -122,14 +122,12 @@ def sinkhorn_lpl1_mm(a, labels_a, b, M, reg, eta=0.1, numItermax=10,
     p = 0.5
     epsilon = 1e-3
 
-    indices_labels = []
-    classes = nx.unique(labels_a)
-    for c in classes:
-        idxc, = nx.where(labels_a == c)
-        indices_labels.append(idxc)
+    labels_u, labels_idx = nx.unique(labels_a, return_inverse=True)
+    n_labels = labels_u.shape[0]
+    unroll_labels_idx = nx.eye(n_labels, type_as=M)[labels_idx]
 
     W = nx.zeros(M.shape, type_as=M)
-    for cpt in range(numItermax):
+    for _ in range(numItermax):
         Mreg = M + eta * W
         if log:
             transp, log = sinkhorn(a, b, Mreg, reg, numItermax=numInnerItermax,
@@ -137,13 +135,12 @@ def sinkhorn_lpl1_mm(a, labels_a, b, M, reg, eta=0.1, numItermax=10,
         else:
             transp = sinkhorn(a, b, Mreg, reg, numItermax=numInnerItermax,
                               stopThr=stopInnerThr)
-        # the transport has been computed. Check if classes are really
-        # separated
-        W = nx.ones(M.shape, type_as=M)
-        for (i, c) in enumerate(classes):
-            majs = nx.sum(transp[indices_labels[i]], axis=0)
-            majs = p * ((majs + epsilon) ** (p - 1))
-            W[indices_labels[i]] = majs
+        # the transport has been computed
+        # check if classes are really separated
+        W = nx.repeat(transp.T[:, :, None], n_labels, axis=2) * unroll_labels_idx[None, :, :]
+        W = nx.sum(W, axis=1)
+        W = nx.dot(W, unroll_labels_idx.T)
+        W = p * ((W.T + epsilon) ** (p - 1))
 
     if log:
         return transp, log
@@ -376,8 +373,10 @@ def emd_laplace(a, b, xs, xt, M, sim='knn', sim_param=None, reg='pos', eta=1, al
     elif sim == 'knn':
         if sim_param is None:
             sim_param = 3
-
-        from sklearn.neighbors import kneighbors_graph
+        try:
+            from sklearn.neighbors import kneighbors_graph
+        except ImportError:
+            raise ValueError('scikit-learn must be installed to use knn similarity. Install with `$pip install scikit-learn`.')
 
         sS = nx.from_numpy(kneighbors_graph(
             X=nx.to_numpy(xs), n_neighbors=int(sim_param)
@@ -497,7 +496,7 @@ class BaseTransport(BaseEstimator):
 
             if (ys is not None) and (yt is not None):
 
-                if self.limit_max != np.infty:
+                if self.limit_max != np.inf:
                     self.limit_max = self.limit_max * nx.max(self.cost_)
 
                 # missing_labels is a (ns, nt) matrix of {0, 1} such that
@@ -519,7 +518,7 @@ class BaseTransport(BaseEstimator):
                     cost_correction = label_match * missing_labels * self.limit_max
                 # this operation is necessary because 0 * Inf = NAN
                 # thus is irrelevant when limit_max is finite
-                cost_correction = nx.nan_to_num(cost_correction, -np.infty)
+                cost_correction = nx.nan_to_num(cost_correction, -np.inf)
                 self.cost_ = nx.maximum(self.cost_, cost_correction)
 
             # distribution estimation
@@ -1067,7 +1066,7 @@ class SinkhornTransport(BaseTransport):
         method from :ref:`[66]
         <references-sinkhorntransport>` and :ref:`[19]
         <references-sinkhorntransport>`.
-    limit_max: float, optional (default=np.infty)
+    limit_max: float, optional (default=np.inf)
         Controls the semi supervised mode. Transport between labeled source
         and target samples of different classes will exhibit an cost defined
         by this variable
@@ -1109,7 +1108,7 @@ class SinkhornTransport(BaseTransport):
                  tol=10e-9, verbose=False, log=False,
                  metric="sqeuclidean", norm=None,
                  distribution_estimation=distribution_estimation_uniform,
-                 out_of_sample_map='continuous', limit_max=np.infty):
+                 out_of_sample_map='continuous', limit_max=np.inf):
 
         if out_of_sample_map not in ['ferradans', 'continuous']:
             raise ValueError('Unknown out_of_sample_map method')
@@ -1417,7 +1416,7 @@ class SinkhornLpl1Transport(BaseTransport):
         The kind of out of sample mapping to apply to transport samples
         from a domain into another one. Currently the only possible option is
         "ferradans" which uses the method proposed in :ref:`[6] <references-sinkhornlpl1transport>`.
-    limit_max: float, optional (default=np.infty)
+    limit_max: float, optional (default=np.inf)
         Controls the semi supervised mode. Transport between labeled source
         and target samples of different classes will exhibit a cost defined by
         limit_max.
@@ -1450,7 +1449,7 @@ class SinkhornLpl1Transport(BaseTransport):
                  tol=10e-9, verbose=False,
                  metric="sqeuclidean", norm=None,
                  distribution_estimation=distribution_estimation_uniform,
-                 out_of_sample_map='ferradans', limit_max=np.infty):
+                 out_of_sample_map='ferradans', limit_max=np.inf):
         self.reg_e = reg_e
         self.reg_cl = reg_cl
         self.max_iter = max_iter
@@ -1923,7 +1922,7 @@ class MappingTransport(BaseEstimator):
                 transp = self.coupling_ / nx.sum(self.coupling_, 1)[:, None]
 
                 # set nans to 0
-                transp[~ nx.isfinite(transp)] = 0
+                transp = nx.nan_to_num(transp, nan=0, posinf=0, neginf=0)
 
                 # compute transported samples
                 transp_Xs = nx.dot(transp, self.xt_)
@@ -2212,7 +2211,7 @@ class JCPOTTransport(BaseTransport):
                     transp = coupling / nx.sum(coupling, 1)[:, None]
 
                     # set nans to 0
-                    transp[~ nx.isfinite(transp)] = 0
+                    transp = nx.nan_to_num(transp, nan=0, posinf=0, neginf=0)
 
                     # compute transported samples
                     transp_Xs.append(nx.dot(transp, self.xt_))
@@ -2236,7 +2235,7 @@ class JCPOTTransport(BaseTransport):
                     # transport the source samples
                     for coupling in self.coupling_:
                         transp = coupling / nx.sum(coupling, 1)[:, None]
-                        transp[~ nx.isfinite(transp)] = 0
+                        transp = nx.nan_to_num(transp, nan=0, posinf=0, neginf=0)
                         transp_Xs_.append(nx.dot(transp, self.xt_))
 
                     transp_Xs_ = nx.concatenate(transp_Xs_, axis=0)
@@ -2289,7 +2288,7 @@ class JCPOTTransport(BaseTransport):
                 transp = self.coupling_[i] / nx.sum(self.coupling_[i], 1)[:, None]
 
                 # set nans to 0
-                transp[~ nx.isfinite(transp)] = 0
+                transp = nx.nan_to_num(transp, nan=0, posinf=0, neginf=0)
 
                 if self.log:
                     D1 = self.log_['D1'][i]
@@ -2337,7 +2336,7 @@ class JCPOTTransport(BaseTransport):
                 transp = self.coupling_[i] / nx.sum(self.coupling_[i], 1)[:, None]
 
                 # set nans to 0
-                transp[~ nx.isfinite(transp)] = 0
+                transp = nx.nan_to_num(transp, nan=0, posinf=0, neginf=0)
 
                 # compute propagated labels
                 transp_ys.append(nx.dot(D1, transp.T).T)

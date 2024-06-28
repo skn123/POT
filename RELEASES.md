@@ -1,12 +1,28 @@
 # Releases
 
-## 0.9.4dev
+## 0.9.5dev
 
 #### New features
+
+#### Closed issues
+
+## 0.9.4
+*June 2024*
+
+This new release contains several new features and bug fixes. Among the new features
+we have novel [Quantized FGW](https://pythonot.github.io/auto_examples/gromov/plot_quantized_gromov_wasserstein.html) solvers that can be used to speed up the computation of the FGW loss on large datasets or to promote a structure on the pairwise matrices. We also updated the continuous entropic mapping to provide efficient out-of-sample continuous mapping thanks to entropic regularization. We also have a new general unbalanced solvers for `ot.solve` and BFGS solver and illustrative example. Finally we have a new solver for the [Low Rank Gromov-Wasserstein](https://pythonot.github.io/auto_examples/others/plot_lowrank_GW.html) that can be used to compute the GW distance between two large scale datasets with a low rank approximation.
+
+From a maintenance point of view, we now have a new option to install optional dependencies with `pip install POT[all]` and the specific backends or submodules' dependencies may also be installed individually. The pip options are: `backend-jax, backend-tf, backend-torch, cvxopt, dr, gnn, plot, all`. We also provide with this release support for NumPy 2.0 (the wheels should now be compatible with NumPy 2.0 and below). We also fixed several issues such as gradient sign errors for FGW solvers, empty weights for `ot.emd2`, and line-search in partial GW. We also split the `test/test_gromov.py` into `test/gromov/` to make the tests more manageable.
+
+#### New features
++ NumPy 2.0 support is added (PR #629)
++ New quantized FGW solvers `ot.gromov.quantized_fused_gromov_wasserstein`, `ot.gromov.quantized_fused_gromov_wasserstein_samples` and `ot.gromov.quantized_fused_gromov_wasserstein_partitioned` (PR #603)
 + `ot.gromov._gw.solve_gromov_linesearch` now has an argument to specify if the matrices are symmetric in which case the computation can be done faster (PR #607).
 + Continuous entropic mapping (PR #613)
 + New general unbalanced solvers for `ot.solve` and BFGS solver and illustrative example (PR #620)
 + Add gradient computation with envelope theorem to sinkhorn solver of `ot.solve` with `grad='envelope'` (PR #605).
++ Added support for [Low rank Gromov-Wasserstein](https://proceedings.mlr.press/v162/scetbon22b/scetbon22b.pdf) with `ot.gromov.lowrank_gromov_wasserstein_samples` (PR #614)
++ Optional dependencies may now be installed with `pip install POT[all]` The specific backends or submodules' dependencies may also be installed individually. The pip options are: `backend-jax, backend-tf, backend-torch, cvxopt, dr, gnn, all`. The installation of the `cupy` backend should be done with conda.
 
 #### Closed issues
 - Fix gpu compatibility of sr(F)GW solvers when `G0 is not None`(PR #596)
@@ -15,6 +31,11 @@
 - Fix a sign error regarding the gradient of `ot.gromov._gw.fused_gromov_wasserstein2` and `ot.gromov._gw.gromov_wasserstein2` for the kl loss (PR #610)
 - Fix same sign error for sr(F)GW conditional gradient solvers (PR #611)
 - Split `test/test_gromov.py` into `test/gromov/` (PR #619)
+- Fix (F)GW barycenter functions to support computing barycenter on 1 input + deprecate structures as lists (PR #628)
+- Fix line-search in partial GW and change default init to the interior of partial transport plans (PR #602)
+- Fix `ot.da.sinkhorn_lpl1_mm` compatibility with JAX (PR #592)
+- Fiw linesearch import error on Scipy 1.14 (PR #642, Issue #641)
+- Upgrade supported JAX versions from jax<=0.4.24 to jax<=0.4.30 (PR #643)
 
 ## 0.9.3
 *January 2024*
