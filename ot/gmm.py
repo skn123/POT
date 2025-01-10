@@ -16,6 +16,38 @@ from .lp import dist
 from .gaussian import bures_wasserstein_mapping
 
 
+def gaussian_logpdf(x, m, C):
+    r"""
+    Compute the log of the probability density function of a multivariate
+    Gaussian distribution.
+
+    Parameters
+    ----------
+    x : array-like, shape (..., d)
+        The input samples.
+    m : array-like, shape (d,)
+        The mean vector of the Gaussian distribution.
+    C : array-like, shape (d, d)
+        The covariance matrix of the Gaussian distribution.
+
+    Returns
+    -------
+    pdf : array-like, shape (...,)
+        The probability density function evaluated at each sample.
+
+    """
+    assert (
+        x.shape[-1] == m.shape[-1] == C.shape[-1] == C.shape[-2]
+    ), "Dimension mismatch"
+    nx = get_backend(x, m, C)
+    d = m.shape[0]
+    diff = x - m
+    inv_C = nx.inv(C)
+    z = nx.sum(diff * (diff @ inv_C), axis=-1)
+    _, log_det_C = nx.slogdet(C)
+    return -0.5 * (d * np.log(2 * np.pi) + log_det_C + z)
+
+
 def gaussian_pdf(x, m, C):
     r"""
     Compute the probability density function of a multivariate
@@ -36,13 +68,7 @@ def gaussian_pdf(x, m, C):
         The probability density function evaluated at each sample.
 
     """
-    assert x.shape[-1] == m.shape[-1] == C.shape[-1] == C.shape[-2], \
-        "Dimension mismatch"
-    nx = get_backend(x, m, C)
-    d = x.shape[-1]
-    z = (2 * np.pi) ** (-d / 2) * nx.det(C) ** (-0.5)
-    exp = nx.exp(-0.5 * nx.sum(((x - m) @ nx.inv(C)) * (x - m), axis=-1))
-    return z * exp
+    return get_backend(x, m, C).exp(gaussian_logpdf(x, m, C))
 
 
 def gmm_pdf(x, m, C, w):
@@ -67,8 +93,9 @@ def gmm_pdf(x, m, C, w):
         The PDF values at the given points.
 
     """
-    assert m.shape[0] == C.shape[0] == w.shape[0], \
-        "All GMM parameters must have the same amount of components"
+    assert (
+        m.shape[0] == C.shape[0] == w.shape[0]
+    ), "All GMM parameters must have the same amount of components"
     nx = get_backend(x, m, C, w)
     out = nx.zeros((x.shape[:-1]))
     for k in range(m.shape[0]):
@@ -106,27 +133,26 @@ def dist_bures_squared(m_s, m_t, C_s, C_t):
     """
     nx = get_backend(m_s, C_s, m_t, C_t)
 
-    assert m_s.shape[0] == C_s.shape[0], \
-        "Source GMM has different amount of components"
+    assert m_s.shape[0] == C_s.shape[0], "Source GMM has different amount of components"
 
-    assert m_t.shape[0] == C_t.shape[0], \
-        "Target GMM has different amount of components"
+    assert m_t.shape[0] == C_t.shape[0], "Target GMM has different amount of components"
 
-    assert m_s.shape[-1] == m_t.shape[-1] == C_s.shape[-1] == C_t.shape[-1], \
-        "All GMMs must have the same dimension"
+    assert (
+        m_s.shape[-1] == m_t.shape[-1] == C_s.shape[-1] == C_t.shape[-1]
+    ), "All GMMs must have the same dimension"
 
-    D_means = dist(m_s, m_t, metric='sqeuclidean')
+    D_means = dist(m_s, m_t, metric="sqeuclidean")
 
     # C2[i, j] = Cs12[i] @ C_t[j] @ Cs12[i], shape (k_s, k_t, d, d)
     Cs12 = nx.sqrtm(C_s)  # broadcasts matrix sqrt over (k_s,)
-    C2 = nx.einsum('ikl,jlm,imn->ijkn', Cs12, C_t, Cs12)
+    C2 = nx.einsum("ikl,jlm,imn->ijkn", Cs12, C_t, Cs12)
     C = nx.sqrtm(C2)  # broadcasts matrix sqrt over (k_s, k_t)
 
     # D_covs[i,j] = trace(C_s[i] + C_t[j] - 2C[i,j])
-    trace_C_s = nx.einsum('ikk->i', C_s)[:, None]  # (k_s, 1)
-    trace_C_t = nx.einsum('ikk->i', C_t)[None, :]  # (1, k_t)
+    trace_C_s = nx.einsum("ikk->i", C_s)[:, None]  # (k_s, 1)
+    trace_C_t = nx.einsum("ikk->i", C_t)[None, :]  # (1, k_t)
     D_covs = trace_C_s + trace_C_t  # broadcasts to (k_s, k_t)
-    D_covs -= 2 * nx.einsum('ijkk->ij', C)
+    D_covs -= 2 * nx.einsum("ijkk->ij", C)
 
     return nx.maximum(D_means + D_covs, 0)
 
@@ -169,11 +195,9 @@ def gmm_ot_loss(m_s, m_t, C_s, C_t, w_s, w_t, log=False):
     """
     get_backend(m_s, C_s, w_s, m_t, C_t, w_t)
 
-    assert m_s.shape[0] == w_s.shape[0], \
-        "Source GMM has different amount of components"
+    assert m_s.shape[0] == w_s.shape[0], "Source GMM has different amount of components"
 
-    assert m_t.shape[0] == w_t.shape[0], \
-        "Target GMM has different amount of components"
+    assert m_t.shape[0] == w_t.shape[0], "Target GMM has different amount of components"
 
     D = dist_bures_squared(m_s, m_t, C_s, C_t)
     return emd2(w_s, w_t, D, log=log)
@@ -217,18 +241,17 @@ def gmm_ot_plan(m_s, m_t, C_s, C_t, w_s, w_t, log=False):
     """
     get_backend(m_s, C_s, w_s, m_t, C_t, w_t)
 
-    assert m_s.shape[0] == w_s.shape[0], \
-        "Source GMM has different amount of components"
+    assert m_s.shape[0] == w_s.shape[0], "Source GMM has different amount of components"
 
-    assert m_t.shape[0] == w_t.shape[0], \
-        "Target GMM has different amount of components"
+    assert m_t.shape[0] == w_t.shape[0], "Target GMM has different amount of components"
 
     D = dist_bures_squared(m_s, m_t, C_s, C_t)
     return emd(w_s, w_t, D, log=log)
 
 
-def gmm_ot_apply_map(x, m_s, m_t, C_s, C_t, w_s, w_t, plan=None,
-                     method='bary', seed=None):
+def gmm_ot_apply_map(
+    x, m_s, m_t, C_s, C_t, w_s, w_t, plan=None, method="bary", seed=None
+):
     r"""
     Apply Gaussian Mixture Model (GMM) optimal transport (OT) mapping to input
     data. The 'barycentric' mapping corresponds to the barycentric projection
@@ -282,16 +305,16 @@ def gmm_ot_apply_map(x, m_s, m_t, C_s, C_t, w_s, w_t, plan=None,
     d = m_s.shape[1]
     n_samples = x.shape[0]
 
-    if method == 'bary':
-        normalization = gmm_pdf(x, m_s, C_s, w_s)[:, None]
+    if method == "bary":
         out = nx.zeros(x.shape)
-        print('where plan > 0', nx.where(plan > 0))
+        logpdf = nx.stack(
+            [gaussian_logpdf(x, m_s[k], C_s[k])[:, None] for k in range(k_s)]
+        )
 
         # only need to compute for non-zero plan entries
-        for (i, j) in zip(*nx.where(plan > 0)):
+        for i, j in zip(*nx.where(plan > 0)):
             Cs12 = nx.sqrtm(C_s[i])
             Cs12inv = nx.inv(Cs12)
-            g = gaussian_pdf(x, m_s[i], C_s[i])[:, None]
 
             M0 = nx.sqrtm(Cs12 @ C_t[j] @ Cs12)
             A = Cs12inv @ M0 @ Cs12inv
@@ -299,9 +322,12 @@ def gmm_ot_apply_map(x, m_s, m_t, C_s, C_t, w_s, w_t, plan=None,
 
             # gaussian mapping between components i and j applied to x
             T_ij_x = x @ A + b
-            out = out + plan[i, j] * g * T_ij_x
+            z = w_s[:, None, None] * nx.exp(logpdf - logpdf[i][None, :, :])
+            denom = nx.sum(z, axis=0)
 
-        return out / normalization
+            out = out + plan[i, j] * T_ij_x / denom
+
+        return out
 
     else:  # rand
         # A[i, j] is the linear part of the gaussian mapping between components
@@ -312,7 +338,7 @@ def gmm_ot_apply_map(x, m_s, m_t, C_s, C_t, w_s, w_t, plan=None,
         b = nx.zeros((k_s, k_t, d))
 
         # only need to compute for non-zero plan entries
-        for (i, j) in zip(*nx.where(plan > 0)):
+        for i, j in zip(*nx.where(plan > 0)):
             Cs12 = nx.sqrtm(C_s[i])
             Cs12inv = nx.inv(Cs12)
 
@@ -320,14 +346,19 @@ def gmm_ot_apply_map(x, m_s, m_t, C_s, C_t, w_s, w_t, plan=None,
             A[i, j] = Cs12inv @ M0 @ Cs12inv
             b[i, j] = m_t[j] - A[i, j] @ m_s[i]
 
-        normalization = gmm_pdf(x, m_s, C_s, w_s)  # (n_samples,)
-        gs = np.stack(
-            [gaussian_pdf(x, m_s[i], C_s[i]) for i in range(k_s)], axis=-1)
+        logpdf = nx.stack(
+            [gaussian_logpdf(x, m_s[k], C_s[k]) for k in range(k_s)], axis=-1
+        )
         # (n_samples, k_s)
         out = nx.zeros(x.shape)
 
         for i_sample in range(n_samples):
-            p_mat = plan * gs[i_sample][:, None] / normalization[i_sample]
+            log_g = logpdf[i_sample]
+            log_diff = log_g[:, None] - log_g[None, :]
+            weighted_exp = w_s[:, None] * nx.exp(log_diff)
+            denom = nx.sum(weighted_exp, axis=0)[:, None] * nx.ones(plan.shape[1])
+            p_mat = plan / denom
+
             p = p_mat.reshape(k_s * k_t)  # stack line-by-line
             # sample between 0 and k_s * k_t - 1
             ij_mat = rng.choice(k_s * k_t, p=p)
@@ -338,8 +369,7 @@ def gmm_ot_apply_map(x, m_s, m_t, C_s, C_t, w_s, w_t, plan=None,
         return out
 
 
-def gmm_ot_plan_density(x, y, m_s, m_t, C_s, C_t, w_s, w_t,
-                        plan=None, atol=1e-2):
+def gmm_ot_plan_density(x, y, m_s, m_t, C_s, C_t, w_s, w_t, plan=None, atol=1e-2):
     """
     Compute the density of the Gaussian Mixture Model - Optimal Transport
     coupling between GMMS at given points, as introduced in [69].
@@ -381,8 +411,9 @@ def gmm_ot_plan_density(x, y, m_s, m_t, C_s, C_t, w_s, w_t,
     .. [69] Delon, J., & Desolneux, A. (2020). A Wasserstein-type distance in the space of Gaussian mixture models. SIAM Journal on Imaging Sciences, 13(2), 936-970.
 
     """
-    assert x.shape[-1] == y.shape[-1], \
-        "x (n, d) and y (m, d) must have the same dimension d"
+    assert (
+        x.shape[-1] == y.shape[-1]
+    ), "x (n, d) and y (m, d) must have the same dimension d"
     n, m = x.shape[0], y.shape[0]
     nx = get_backend(x, y, m_s, m_t, C_s, C_t, w_s, w_t)
 
@@ -399,12 +430,13 @@ def gmm_ot_plan_density(x, y, m_s, m_t, C_s, C_t, w_s, w_t,
         g = gaussian_pdf(xx, m_s[k0], C_s[k0])
         out = plan[k0, k1] * g
         norms = nx.norm(Tx - yy, axis=-1)
-        out = out * ((norms < atol) * 1.)
+        out = out * ((norms < atol) * 1.0)
         return out
 
     mat = nx.stack(
         [
             nx.stack([Tk0k1(k0, k1) for k1 in range(m_t.shape[0])])
             for k0 in range(m_s.shape[0])
-        ])
+        ]
+    )
     return nx.sum(mat, axis=(0, 1))

@@ -1,17 +1,46 @@
 # Releases
 
-## 0.9.5dev
+## 0.9.6dev
 
 #### New features
-- Add feature `mass=True` for `nx.kl_div` (PR #654)
-- Gaussian Mixture Model OT `ot.gmm` (PR #649)
-- Add feature `semirelaxed_fgw_barycenters` and generic FGW-related barycenter updates `update_barycenter_structure` and `update_barycenter_feature` (PR #659)
-- Add initialization heuristics for sr(F)GW problems via `semirelaxed_init_plan`, integrated in all sr(F)GW solvers (PR #659)
+- Implement CG solvers for partial FGW (PR #687)
+- Added feature `grad=last_step` for `ot.solvers.solve` (PR #693)
+- Automatic PR labeling and release file update check (PR #704)
+
+#### Closed issues
+- Fixed `ot.mapping` solvers which depended on deprecated `cvxpy` `ECOS` solver (PR #692, Issue #668)
+- Fixed numerical errors in `ot.gmm` (PR #690, Issue #689)
+- Add version number to the documentation (PR #696)
+- Update doc for default regularization in `ot.unbalanced` sinkhorn solvers (Issue #691, PR #700)
+
+## 0.9.5
+
+*November 2024*
+
+This new release contains several new features, starting with
+a novel [Gaussian Mixture Model Optimal Transport (GMM-OT)](https://pythonot.github.io/master/gen_modules/ot.gmm.html#examples-using-ot-gmm-gmm-ot-apply-map) solver to compare GMM while enforcing the transport plan to remain a GMM, that benefits from a closed-form solution making it practical for high-dimensional matching problems. We also extended our general unbalanced OT solvers to support any non-negative reference measure in the regularization terms, before adding the novel [translation invariant UOT](https://pythonot.github.io/master/auto_examples/unbalanced-partial/plot_conv_sinkhorn_ti.html) solver showcasing a higher convergence speed. We also implemented several new solvers and enhanced existing ones to perform OT across spaces. These include a [semi-relaxed FGW barycenter](https://pythonot.github.io/master/auto_examples/gromov/plot_semirelaxed_gromov_wasserstein_barycenter.html) solver, coupled with new initialization heuristics for the inner divergence computation, to perform graph partitioning or dictionary learning. Followed by novel [unbalanced FGW and Co-optimal transport](https://pythonot.github.io/master/auto_examples/others/plot_outlier_detection_with_COOT_and_unbalanced_COOT.html) solvers to promote robustness to outliers in such matching problems. And we finally updated the implementation of partial GW now supporting asymmetric structures and the KL divergence, while leveraging a new generic conditional gradient solver for partial transport problems enabling significant speed improvements. These latest updates required some modifications to the line search functions of our generic conditional gradient solver, paving the way for future improvements to other GW-based solvers. Last but not least, we implemented a pre-commit scheme to automatically correct common programming mistakes likely to be made by our future contributors.
+
+This release also contains few bug fixes, concerning the support of any metric in `ot.emd_1d` / `ot.emd2_1d`, and the support of any weights in `ot.gaussian`.
+ 
+#### Breaking change
+- Custom functions provided as parameter `line_search` to `ot.optim.generic_conditional_gradient` must now have the signature `line_search(cost, G, deltaG, Mi, cost_G, df_G, **kwargs)`, adding as input `df_G` the gradient of the regularizer evaluated at the transport plan `G`. This change aims at improving speed of solvers having quadratic polynomial functions as regularizer such as the Gromov-Wassertein loss (PR #663).
+
+#### New features
+- New linter based on pre-commit using ruff, codespell and yamllint (PR #681)
+- Added feature `mass=True` for `nx.kl_div` (PR #654)
+- Implemented Gaussian Mixture Model OT `ot.gmm` (PR #649)
+- Added feature `semirelaxed_fgw_barycenters` and generic FGW-related barycenter updates `update_barycenter_structure` and `update_barycenter_feature` (PR #659)
+- Added initialization heuristics for sr(F)GW problems via `semirelaxed_init_plan`, integrated in all sr(F)GW solvers (PR #659)
 - Improved `ot.plot.plot1D_mat` (PR #649)
 - Added `nx.det` (PR #649)
 - `nx.sqrtm` is now broadcastable (takes ..., d, d) inputs (PR #649)
-- restructure `ot.unbalanced` module (PR #658)
-- add `ot.unbalanced.lbfgsb_unbalanced2` and add flexible reference measure `c` in all unbalanced solvers (PR #658)
+- Restructured `ot.unbalanced` module (PR #658)
+- Added `ot.unbalanced.lbfgsb_unbalanced2` and add flexible reference measure `c` in all unbalanced solvers (PR #658)
+- Implemented Fused unbalanced Gromov-Wasserstein and unbalanced Co-Optimal Transport (PR #677)
+- Notes before depreciating partial Gromov-Wasserstein function in `ot.partial` moved to ot.gromov  (PR #663)
+- Create `ot.gromov._partial` add new features `loss_fun = "kl_loss"` and `symmetry=False` to all solvers while increasing speed + updating adequatly `ot.solvers` (PR #663)
+- Added `ot.unbalanced.sinkhorn_unbalanced_translation_invariant` (PR #676)
+- Refactored `ot.bregman._convolutional` to improve readability (PR #709)
 
 #### Closed issues
 - Fixed `ot.gaussian` ignoring weights when computing means (PR #649, Issue #648)
@@ -72,7 +101,7 @@ xs, xt = np.random.randn(100, 2), np.random.randn(50, 2)
 
 # Solve OT problem with empirical samples
 sol = ot.solve_sample(xs, xt) # Exact OT betwen smaples with uniform weights
-sol = ot.solve_sample(xs, xt, wa, wb) # Exact OT with weights given by user 
+sol = ot.solve_sample(xs, xt, wa, wb) # Exact OT with weights given by user
 
 sol = ot.solve_sample(xs, xt, reg= 1, metric='euclidean') # sinkhorn with euclidean metric
 
@@ -84,7 +113,7 @@ sol = ot.solve_sample(x,x2, method='lowrank', rank=10) # compute lowrank sinkhor
 
 value_bw = ot.solve_sample(xs, xt, method='gaussian').value # Bures-Wasserstein distance
 
-# Solve GW problem 
+# Solve GW problem
 Cs, Ct = ot.dist(xs, xs), ot.dist(xt, xt) # compute cost matrices
 sol = ot.solve_gromov(Cs,Ct) # Exact GW between samples with uniform weights
 
@@ -92,7 +121,7 @@ sol = ot.solve_gromov(Cs,Ct) # Exact GW between samples with uniform weights
 M = ot.dist(xs, xt) # compute cost matrix
 
 # Exact FGW between samples with uniform weights
-sol = ot.solve_gromov(Cs, Ct, M, loss='KL', alpha=0.7) # FGW with KL data fitting  
+sol = ot.solve_gromov(Cs, Ct, M, loss='KL', alpha=0.7) # FGW with KL data fitting
 
 
 # recover solutions objects
@@ -102,14 +131,14 @@ value = sol.value # OT value
 
 # for GW and FGW
 value_linear = sol.value_linear # linear part of the loss
-value_quad = sol.value_quad # quadratic part of the loss 
+value_quad = sol.value_quad # quadratic part of the loss
 
 ```
 
 Users are encouraged to use the new API (it is much simpler) but it might still be subjects to small changes before the release of POT 1.0 .
 
 
-We also fixed a number of issues, the most pressing being a problem of GPU memory allocation when pytorch is installed that will not happen now thanks to Lazy initialization of the backends. We now also have the possibility to deactivate some backends using environment which prevents POT from importing them and can lead to large import speedup. 
+We also fixed a number of issues, the most pressing being a problem of GPU memory allocation when pytorch is installed that will not happen now thanks to Lazy initialization of the backends. We now also have the possibility to deactivate some backends using environment which prevents POT from importing them and can lead to large import speedup.
 
 
 #### New features
@@ -143,7 +172,7 @@ We also fixed a number of issues, the most pressing being a problem of GPU memor
 - Correct independence of `fgw_barycenters` to `init_C` and `init_X` (Issue #547, PR #566)
 - Avoid precision change when computing norm using PyTorch backend (Discussion #570, PR #572)
 - Create `ot/bregman/`repository (Issue #567, PR #569)
-- Fix matrix feature shape in `entropic_fused_gromov_barycenters`(Issue #574, PR #573)  
+- Fix matrix feature shape in `entropic_fused_gromov_barycenters`(Issue #574, PR #573)
 - Fix (fused) gromov-wasserstein barycenter solvers to support `kl_loss`(PR #576)
 
 
