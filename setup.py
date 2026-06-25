@@ -15,19 +15,20 @@ from setuptools.extension import Extension
 import numpy
 from Cython.Build import cythonize
 
-sys.path.append(os.path.join("ot", "helpers"))
+ROOT = os.path.abspath(os.path.dirname(__file__))
+
+sys.path.append(os.path.join(ROOT, "ot", "helpers"))
 from openmp_helpers import check_openmp_support
 
 # dirty but working
 __version__ = re.search(
     r'__version__\s*=\s*[\'"]([^\'"]*)[\'"]',  # It excludes inline comment too
-    open("ot/__init__.py").read(),
+    open(os.path.join(ROOT, "ot/__init__.py")).read(),
 ).group(1)
 # The beautiful part is, I don't even need to check exceptions here.
 # If something messes up, let the build process fail noisy, BEFORE my release!
 
 # thanks PyPI for handling markdown now
-ROOT = os.path.abspath(os.path.dirname(__file__))
 with open(os.path.join(ROOT, "README.md"), encoding="utf-8") as f:
     README = f.read()
 
